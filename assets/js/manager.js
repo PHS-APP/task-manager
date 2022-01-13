@@ -742,14 +742,6 @@ socket.on("update", (data) => {
         case 7:
             update_subtask_added(data.path, data.task)
             break;
-        // label removed
-        case 8:
-            update_label_removed(data.path, data.label);
-            break;
-        // label added
-        case 9:
-            update_label_added(data.path, data.label);
-            break;
         default:
             break;
     }
