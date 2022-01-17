@@ -68,22 +68,6 @@ def handle_bad_request (e):
 def handle_internal_error (e):
 	return render("errors/500.html"), 500
 
-# @socketio.on("connection")
-# def hand_connect (*a):
-#	pass
-
-# @socketio.on("pboot")
-# def boot_project_client ():
-#	flask_socketio.join_room("project-view")
-#	emit("boot-res")
-
-# @socketio.on("leav-proj")
-# def leave_project ():
-#	print("leaving")
-#	# id = flask_socketio.flask.request.sid
-#	rooms = flask_socketio.rooms()
-#	flask_socketio.leave_room(rooms[1])
-
 def _taskform (lst, indent=0):
 	final = ""
 	for task in lst:
@@ -109,15 +93,8 @@ def _projform ():
 	f += "\n]"
 	return f
 
-# @socketio.on("dump--db")
-# def dump__db (*a):
-#	if (not a):
-#		print(_projform())
-#	else:
-#		print(_taskform(projects[a[0]["name"]]))
-
 # websocket server
-@sock.route("/ws")
+@sock.route("/")
 def handle_request(websocket):
 	while True:
 		request = json.loads(websocket.receive())

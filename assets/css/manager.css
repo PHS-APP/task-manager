@@ -2,9 +2,6 @@
     font-family: system-ui;
     margin: 0px;
 }
-.hidden {
-    display: none;
-}
 /* sets all text input to have a gray outline unless otherwise specified */
 input[type="text"]:not(.default) {
     outline-color : gray;

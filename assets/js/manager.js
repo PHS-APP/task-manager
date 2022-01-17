@@ -35,7 +35,7 @@ const breadlist = document.getElementById("breadcrumbs");
 let origin = pname.textContent;
 
 // websocket for real time communication
-let socket = new WebSocket("ws://" + location.host + "/ws")
+let socket = new WebSocket("ws://" + location.host + "/")
 socket.onopen = function() {
     socket.send(JSON.stringify({"name":"boot","data":{"project":origin}}))
 }
