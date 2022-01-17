@@ -1,5 +1,3 @@
-// websocket for real time communication
-let socket = io();
 // project name
 const pname = document.getElementById("proj-name");
 pname.size = pname.textContent.length;
@@ -35,6 +33,14 @@ const nlab_ops = document.getElementById("new-label-ops");
 const breadlist = document.getElementById("breadcrumbs");
 // origin project (project name) used for websocket communication
 let origin = pname.textContent;
+
+// websocket for real time communication
+let socket = new WebSocket("ws://" + location.host + "/ws")
+socket.onopen = function() {
+    socket.send(JSON.stringify({"name":"boot","data":{"project":origin}}))
+}
+
+
 // tasks
 let tasks = null;
 
@@ -530,22 +536,6 @@ function bootrender () {
     selprj_name.value = origin;
 }
 
-// requests the tasks for the project
-socket.emit("boot", {project:origin});
-
-// boot response
-socket.on("boot-res", (data) => {
-    // double boot
-    if (booted) {
-        window.location.pathname = "/err/1";
-    } else {
-        booted = true;
-        tasks = data.tasks;
-        icons = data.icons;
-        bootrender();
-    }
-});
-
 function get_task (path) {
     let task = null;
     let search = tasks;
@@ -559,8 +549,8 @@ function get_task (path) {
 function update_task_property (data) {
     let path = data.path;
     let task = get_task(path);
-    let changed = Object.keys(data)[2];
-    let value = data[changed];
+    let changed = data["property"];
+    let value = data["value"];
     if (path.length === 1) {
 	switch (changed) {
        	    case "name":
@@ -602,7 +592,8 @@ function update_task_property (data) {
 	    case "locked":
 		current_task.locked = value;
 		seltsk_locked.src = value ? "/assets/icons/locked.svg" : "/assets/icons/unlocked.svg";
-		value ? set_disable_all(true) : set_disable_all(false);
+	        value ? set_disable_all(true) : set_disable_all(false);
+	        break;
 	    case "labels":
 		current_task.labels = value;
 		let child = null;
@@ -722,17 +713,29 @@ function __update_subtask_button (old, name, pri) {
     }
 }
 
-socket.on("update", (data) => {
+socket.onmessage = function(event) {
+    const data = JSON.parse(event.data);
     const upid = data.id;
     // console.log(upid, "DATA UPDATE ID");
     switch (upid) {
-        // project name change
         case 0:
-            window.location.pathname = "/projects/"+data.name;
+	    //double boot
+	    if (booted) {
+		window.location.pathname = "/err/1";
+	    } else {
+		booted = true;
+		tasks = data.project.tasks;
+		icons = data.project.icons;
+		bootrender();
+	    }
+	    break;
+        // project name change
+        case 1:
+            window.location.pathname = "/projects/"+data.newname;
             break;
         // task property changed
-        case 1:
-            update_task_property(data);
+        case 2:
+	    update_task_property(data);
             break;
         // subtask deleted
         case 6:
@@ -745,7 +748,7 @@ socket.on("update", (data) => {
         default:
             break;
     }
-});
+};
 
 function change_label_remove (path, label) {
     let task = get_task(path);
@@ -762,23 +765,19 @@ function change_label_add (path, label) {
 }
 
 function change_remove_task (path) {
-    socket.emit("remove-task", {"origin":origin, "path":path});
+    socket.send(JSON.stringify({"name":"remove-task", "data":{"origin":origin, "path":path}}))
 }
 
 function change_project_name (newname) {
-    socket.emit("rename-proj", {"origin":origin, "name":newname});
+    socket.send(JSON.stringify({"name":"rename-proj", "data":{"origin":origin, "newname":newname}}))
 }
 
 function change_task_add (path, task_name, priority) {
-    socket.emit("add-task", {"path":path, "task":{"name": task_name, "priority": priority, "desc": "new task", "labels": [], "subtasks":[], "locked": false, "completed": false}, "origin":origin});
+    socket.send(JSON.stringify({"name":"add-task", "data":{"path":path, "task":{"name": task_name, "priority": priority, "desc": "new task", "labels": [], "subtasks":[], "locked": false, "completed": false}, "origin":origin}}))
 }
 
 function change_task_property (path, property, value) {
-    data = {}
-    data["path"] = path
-    data["origin"] = origin
-    data[property] = value
-    socket.emit("change-task-property", data)
+    socket.send(JSON.stringify({"name":"change-task-property", "data":{"property":property, "origin":origin, "path":path, "value": value}}))
 }
 
 function show_new_label_options () {

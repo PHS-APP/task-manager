@@ -1,15 +1,13 @@
-from os import name
+#!/usr/bin/env python3
 from flask import Flask
 from flask import render_template as render
-import flask_socketio
-SocketIO = flask_socketio.SocketIO
-send = flask_socketio.send
-emit = flask_socketio.emit
+from flask_sock import Sock
+import json
 from werkzeug.exceptions import abort
 
 server = Flask(__name__, static_folder="assets")
-server.config["TEMPLATES_AUTO_RELOAD"] = True
-socketio = SocketIO(server)
+sock = Sock(server)
+#socketio = SocketIO(server)
 
 def mkTask (value, priority="med", labels=None, subtasks=None, locked=False):
 	task = {"name":value, "priority":priority, "labels":labels if labels else [], "subtasks":subtasks if subtasks else [], "locked":True if locked else False}
@@ -70,90 +68,21 @@ def handle_bad_request (e):
 def handle_internal_error (e):
 	return render("errors/500.html"), 500
 
-@socketio.on("connection")
-def hand_connect (*a):
-	pass
+# @socketio.on("connection")
+# def hand_connect (*a):
+#	pass
 
-@socketio.on("pboot")
-def boot_project_client ():
-	flask_socketio.join_room("project-view")
-	emit("boot-res")
+# @socketio.on("pboot")
+# def boot_project_client ():
+#	flask_socketio.join_room("project-view")
+#	emit("boot-res")
 
-@socketio.on("boot")
-def boot_client (data):
-	flask_socketio.join_room(data["project"])
-	emit("boot-res", {"tasks":projects[data["project"]],"icons":icons[data["project"]]})
-
-@socketio.on("remove-task")
-def remove_subtask (data):
-	origin = data["origin"]
-	search = projects[origin]
-	path = data["path"]
-	for i in range(len(path)-1):
-		step = path[i]
-		index = task_index(search, step)
-		task = search[index]
-		search = task["subtasks"]
-	name = path[-1]
-	print(search, name, "XYZ")
-	search.pop(task_index(search, name))
-	print(projects[origin])
-	data["id"] = 6
-	emit("update", data, to=origin)
-
-@socketio.on("add-task")
-def add_subtask (data):
-	origin = data["origin"]
-	search = projects[origin]
-	task = data["task"]
-	path = data["path"]
-	for i in range(len(path)):
-		step = path[i]
-		index = task_index(search, step)
-		search = search[index]["subtasks"]
-	if (task_index(search, task["name"]) != -1):
-		return
-	search.append(task)
-	print(projects[origin])
-	data["id"] = 7
-	emit("update", data, to=origin)
-
-@socketio.on("rename-proj")
-def rename_proj (data):
-	print(f"project rename by {flask_socketio.flask.request.sid}")
-	origin = data["origin"]
-	name = data["name"]
-	proj = projects[origin]
-	projects[name] = proj
-	projects.pop(origin)
-	icos = icons[origin]
-	icons[name] = icos
-	icons.pop(origin)
-	data["id"] = 0
-	emit("update", data, to=origin)
-	emit("name-change", {"old":origin,"name":name}, to="project-view")
-
-@socketio.on("change-task-property")
-def change_task_property (data):
-	print(data)
-	origin = data["origin"]
-	path = data["path"]
-	proj = projects[origin]
-	value = data[list(data)[-1]]
-	task = None
-	for step in path:
-		task = proj[task_index(proj, step)]
-		proj = task["subtasks"]
-	task[list(data)[-1]] = value;
-	data["id"] = 1
-	emit("update", data, to=origin)
-
-@socketio.on("leav-proj")
-def leave_project ():
-	print("leaving")
-	# id = flask_socketio.flask.request.sid
-	rooms = flask_socketio.rooms()
-	flask_socketio.leave_room(rooms[1])
+# @socketio.on("leav-proj")
+# def leave_project ():
+#	print("leaving")
+#	# id = flask_socketio.flask.request.sid
+#	rooms = flask_socketio.rooms()
+#	flask_socketio.leave_room(rooms[1])
 
 def _taskform (lst, indent=0):
 	final = ""
@@ -180,12 +109,78 @@ def _projform ():
 	f += "\n]"
 	return f
 
-@socketio.on("dump--db")
-def dump__db (*a):
-	if (not a):
-		print(_projform())
-	else:
-		print(_taskform(projects[a[0]["name"]]))
+# @socketio.on("dump--db")
+# def dump__db (*a):
+#	if (not a):
+#		print(_projform())
+#	else:
+#		print(_taskform(projects[a[0]["name"]]))
 
+# websocket server
+@sock.route("/ws")
+def handle_request(websocket):
+	while True:
+		request = json.loads(websocket.receive())
+		data = request["data"]
+		if request["name"] == "boot":
+			data["id"] = 0
+			data["project"] = {"tasks":projects[data["project"]], "icons":icons[data["project"]]}
+			websocket.send(json.dumps(data))
+		elif request["name"] == "change-task-property":
+			origin = data["origin"]
+			path = data["path"]
+			proj = projects[origin]
+			value = data["value"]
+			task = None
+			for step in path:
+				task = proj[task_index(proj, step)]
+				proj = task["subtasks"]
+			task[data["property"]] = value;
+			print(task)
+			data["id"] = 2
+			websocket.send(json.dumps(data))
+		elif request["name"] == "rename-proj":
+			origin = data["origin"]
+			name = data["newname"]
+			proj = projects[origin]
+			projects[name] = proj
+			projects.pop(origin)
+			icos = icons[origin]
+			icons[name] = icos
+			icons.pop(origin)
+			data["id"] = 1
+			websocket.send(json.dumps(data))
+		elif request["name"] == "add-task":
+			origin = data["origin"]
+			search = projects[origin]
+			task = data["task"]
+			path = data["path"]
+			for i in range(len(path)):
+				step = path[i]
+				index = task_index(search, step)
+				search = search[index]["subtasks"]
+			if (task_index(search, task["name"]) != -1):
+				return
+			search.append(task)
+			print(projects[origin])
+			data["id"] = 7
+			websocket.send(json.dumps(data))
+		elif request["name"] == "remove-task":
+			origin = data["origin"]
+			search = projects[origin]
+			path = data["path"]
+			for i in range(len(path)-1):
+				step = path[i]
+				index = task_index(search, step)
+				task = search[index]
+				search = task["subtasks"]
+			name = path[-1]
+			print(search, name, "XYZ")
+			search.pop(task_index(search, name))
+			print(projects[origin])
+			data["id"] = 6
+			websocket.send(json.dumps(data))
+	
 # server
-socketio.run(server, host="0.0.0.0", port="3000", debug=True)
+if __name__ == "__main__":
+	server.run(host="0.0.0.0", port=3000, debug=True)
